@@ -6,9 +6,9 @@ export default defineConfig({
   optimizeDeps: {
     include: ['react', 'react-dom'],
   },
-  // build: {
-  //   outDir: 'build'
-  // },
+  build: {
+    outDir: 'build'
+  },
   server: {
     port: 3009,
     open: true,
