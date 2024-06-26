@@ -7,7 +7,7 @@ export default defineConfig({
     include: ['react', 'react-dom'],
   },
   build: {
-    outDir: 'dist'
+    outDir: 'build'
   },
   server: {
     port: 3009,
