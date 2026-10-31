@@ -1,0 +1,247 @@
+import React, { useState } from 'react';
+import { InputNumber, Button, Divider, Typography, Alert, Tooltip, Row, Col, Statistic } from 'antd';
+import { CarOutlined, InfoCircleOutlined, ThunderboltOutlined } from '@ant-design/icons';
+
+const { Title, Text } = Typography;
+
+/**
+ * Tính thời gian sạc xe điện
+ *
+ * Công thức:
+ *   Năng lượng cần nạp (kWh) = Dung lượng pin (kWh) × (% đích - % hiện tại) / 100
+ *   Thời gian sạc (h)        = Năng lượng cần nạp / (Công suất sạc × Hiệu suất sạc)
+ *
+ * Số điện nạp thực tế (kWh)  = Năng lượng cần nạp / Hiệu suất sạc  (lấy từ lưới điện)
+ * Tiêu thụ thực tế (kWh/100km) = tùy người dùng nhập
+ */
+
+function formatDuration(hours) {
+    if (!hours || hours <= 0) return '--';
+    const h = Math.floor(hours);
+    const m = Math.round((hours - h) * 60);
+    if (h === 0) return `${m} phút`;
+    if (m === 0) return `${h} giờ`;
+    return `${h} giờ ${m} phút`;
+}
+
+export default function EVChargeCalculator() {
+    const [form, setForm] = useState({
+        currentSoc: 20,       // % pin hiện tại
+        targetSoc: 80,        // % pin muốn sạc tới
+        chargerPower: 7.4,    // kW – công suất sạc (AC 7.4 kW mặc định)
+        chargeEfficiency: 90, // % hiệu suất sạc
+        batteryCapacity: 40,  // kWh – dung lượng pin gốc
+    });
+    const [result, setResult] = useState(null);
+
+    const set = (key) => (val) => setForm((prev) => ({ ...prev, [key]: val }));
+
+    const handleCalc = () => {
+        const {
+            currentSoc,
+            targetSoc,
+            chargerPower,
+            chargeEfficiency,
+            batteryCapacity,
+        } = form;
+
+        if (targetSoc <= currentSoc) {
+            setResult({ error: '% pin đích phải lớn hơn % pin hiện tại' });
+            return;
+        }
+
+        const efficiency = chargeEfficiency / 100;
+
+        // Năng lượng cần nạp vào pin (kWh)
+        const energyNeeded = batteryCapacity * (targetSoc - currentSoc) / 100;
+
+        // Thời gian sạc
+        const chargingHours = energyNeeded / (chargerPower * efficiency);
+
+        // Số điện lấy từ lưới (kWh) – tính cả tổn thất hiệu suất
+        const gridElectricity = energyNeeded / efficiency;
+
+        // Tiền điện (theo giá EVN bậc 3 trung bình ~2.271 đ/kWh, để đơn giản dùng 2.500)
+        // Dùng giá điện bình quân kinh doanh ~3.200 đ (bãi sạc công cộng thường tính vậy)
+        const costHome = gridElectricity * 2500;   // sạc tại nhà ước tính
+        const costStation = gridElectricity * 3200; // trạm công cộng ước tính
+
+        setResult({
+            error: null,
+            energyNeeded: +energyNeeded.toFixed(3),
+            gridElectricity: +gridElectricity.toFixed(3),
+            chargingHours: +chargingHours.toFixed(3),
+            costHome: Math.round(costHome),
+            costStation: Math.round(costStation),
+            socDelta: targetSoc - currentSoc,
+        });
+    };
+
+    const fields = [
+        {
+            key: 'currentSoc',
+            label: '% Pin hiện tại',
+            unit: '%',
+            min: 0, max: 99,
+            tip: 'Phần trăm pin xe hiện tại trước khi sạc',
+        },
+        {
+            key: 'targetSoc',
+            label: '% Pin muốn sạc tới',
+            unit: '%',
+            min: 1, max: 100,
+            tip: 'Phần trăm pin mong muốn sau khi sạc',
+        },
+        {
+            key: 'batteryCapacity',
+            label: 'Dung lượng pin gốc',
+            unit: 'kWh',
+            min: 1, max: 200,
+            step: 0.1,
+            tip: 'Dung lượng pin danh định của xe (ghi trong thông số kỹ thuật)',
+        },
+        {
+            key: 'chargerPower',
+            label: 'Công suất sạc',
+            unit: 'kW',
+            min: 0.1, max: 350,
+            step: 0.1,
+            tip: 'Công suất bộ sạc (AC 7.4kW, AC 11kW, DC 50kW, DC 150kW…)',
+        },
+        {
+            key: 'chargeEfficiency',
+            label: 'Hiệu suất sạc',
+            unit: '%',
+            min: 50, max: 100,
+            tip: 'Hiệu suất chuyển đổi điện từ lưới vào pin (~85–95%). Sạc AC thường 88–92%, DC cao hơn.',
+        },
+    ];
+
+    return (
+        <div className="p-2 sm:p-4 w-full">
+            <Title level={4} className="flex items-center gap-2 !text-base sm:!text-lg">
+                <CarOutlined className="text-green-600" /> Tính thời gian sạc xe điện
+            </Title>
+
+            <Alert
+                className="mb-4"
+                type="info"
+                showIcon
+                message={<span className="text-xs sm:text-sm">Thời gian tính dựa trên công suất sạc thực tế và hiệu suất bộ sạc. Kết quả mang tính tham khảo.</span>}
+            />
+
+            <Row gutter={[16, 12]}>
+                {fields.map((f) => (
+                    <Col xs={24} sm={12} key={f.key}>
+                        <div className="flex flex-col gap-1">
+                            <Text className="text-sm">
+                                {f.label}
+                                <Tooltip title={f.tip}>
+                                    <InfoCircleOutlined className="ml-1 text-gray-400 cursor-pointer" />
+                                </Tooltip>
+                            </Text>
+                            <InputNumber
+                                min={f.min}
+                                max={f.max}
+                                step={f.step || 1}
+                                value={form[f.key]}
+                                onChange={set(f.key)}
+                                addonAfter={f.unit}
+                                style={{ width: '100%' }}
+                            />
+                        </div>
+                    </Col>
+                ))}
+            </Row>
+
+            <Button
+                type="primary"
+                icon={<ThunderboltOutlined />}
+                onClick={handleCalc}
+                className="mt-4"
+                block
+            >
+                Tính thời gian sạc
+            </Button>
+
+            {result && (
+                <>
+                    <Divider />
+                    {result.error ? (
+                        <Alert type="error" message={result.error} showIcon />
+                    ) : (
+                        <>
+                            <Row gutter={[16, 16]} className="mb-4">
+                                <Col xs={24} sm={8}>
+                                    <Statistic
+                                        title="Thời gian sạc"
+                                        value={formatDuration(result.chargingHours)}
+                                        valueStyle={{ color: '#1677ff', fontSize: 20 }}
+                                    />
+                                </Col>
+                                <Col xs={12} sm={8}>
+                                    <Statistic
+                                        title="Năng lượng nạp vào pin"
+                                        value={result.energyNeeded}
+                                        suffix="kWh"
+                                        precision={2}
+                                    />
+                                </Col>
+                                <Col xs={12} sm={8}>
+                                    <Statistic
+                                        title="Điện lấy từ lưới"
+                                        value={result.gridElectricity}
+                                        suffix="kWh"
+                                        precision={2}
+                                        valueStyle={{ color: '#faad14' }}
+                                    />
+                                </Col>
+                            </Row>
+
+                            <div className="bg-gray-50 p-3 rounded-lg space-y-2 text-sm">
+                                <div className="flex justify-between gap-2">
+                                    <Text className="text-sm shrink-0">Tăng % pin:</Text>
+                                    <Text strong className="text-right">{form.currentSoc}% → {form.targetSoc}% (+{result.socDelta}%)</Text>
+                                </div>
+                                <div className="flex justify-between gap-2">
+                                    <Text className="text-sm shrink-0">Điện lấy từ lưới:</Text>
+                                    <Text strong className="text-right">{result.gridElectricity} kWh</Text>
+                                </div>
+                                <div className="flex justify-between gap-2">
+                                    <Text className="text-sm shrink-0">Điện nạp vào pin:</Text>
+                                    <Text strong className="text-right">{result.energyNeeded} kWh</Text>
+                                </div>
+                                <div className="flex justify-between gap-2">
+                                    <Text className="text-sm shrink-0">Tổn hao hiệu suất:</Text>
+                                    <Text type="warning" className="text-right">
+                                        {(result.gridElectricity - result.energyNeeded).toFixed(3)} kWh ({(100 - form.chargeEfficiency)}%)
+                                    </Text>
+                                </div>
+                                <Divider className="my-1" />
+                                <div className="flex justify-between gap-2">
+                                    <Text className="text-sm shrink-0">Tại nhà (~2.500 đ/kWh):</Text>
+                                    <Text strong className="text-green-600 text-right">
+                                        {result.costHome.toLocaleString('vi-VN')} đ
+                                    </Text>
+                                </div>
+                                <div className="flex justify-between gap-2">
+                                    <Text className="text-sm shrink-0">Trạm công cộng (~3.200 đ/kWh):</Text>
+                                    <Text strong className="text-orange-500 text-right">
+                                        {result.costStation.toLocaleString('vi-VN')} đ
+                                    </Text>
+                                </div>
+                            </div>
+
+                            <Alert
+                                className="mt-3"
+                                type="warning"
+                                showIcon
+                                message="Lưu ý: Thời gian thực tế có thể dài hơn do sạc chậm dần khi gần đầy (taper), nhiệt độ pin, và giới hạn của xe/trạm sạc."
+                            />
+                        </>
+                    )}
+                </>
+            )}
+        </div>
+    );
+}

@@ -15,7 +15,7 @@ import { Spin } from 'antd';
 
 function App() {
     return (
-        <div className="max-w-screen-xl mx-auto">
+        <div className="max-w-screen-xl mx-auto px-0 sm:px-4">
             <Router>
                 <Suspense fallback={<Spin fullscreen size="large" />}>
                     <Header />
