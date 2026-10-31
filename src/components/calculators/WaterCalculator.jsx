@@ -9,20 +9,20 @@ const { Title, Text } = Typography;
  * QĐ 18/2023/QĐ-UBND UBND TP Hà Nội
  *
  * Bậc 1:  0 – 10 m³  →  8.500 đ/m³
- * Bậc 2: 11 – 20 m³  → 10.200 đ/m³
- * Bậc 3: 21 – 30 m³  → 12.000 đ/m³
- * Bậc 4:  > 30 m³    → 24.000 đ/m³
+ * Bậc 2: 11 – 20 m³  →  9.900 đ/m³
+ * Bậc 3: 21 – 30 m³  → 16.000 đ/m³
+ * Bậc 4:  > 30 m³    → 27.000 đ/m³
  *
  * Phí bảo vệ môi trường: 10% giá nước (trước VAT)
  * VAT: 5% (tính trên giá nước + phí BVMT)
  *
- * Nguồn: VnExpress (11/7/2023), QĐ 18/2023/QĐ-UBND Hà Nội
+ * Nguồn: QĐ 18/2023/QĐ-UBND Hà Nội (cập nhật)
  */
 const WATER_TIERS = [
     { tier: 1, label: 'Bậc 1 (0 – 10 m³)',  capacity: 10,       price: 8500 },
-    { tier: 2, label: 'Bậc 2 (11 – 20 m³)', capacity: 10,       price: 10200 },
-    { tier: 3, label: 'Bậc 3 (21 – 30 m³)', capacity: 10,       price: 12000 },
-    { tier: 4, label: 'Bậc 4 (> 30 m³)',    capacity: Infinity, price: 24000 },
+    { tier: 2, label: 'Bậc 2 (11 – 20 m³)', capacity: 10,       price: 9900 },
+    { tier: 3, label: 'Bậc 3 (21 – 30 m³)', capacity: 10,       price: 16000 },
+    { tier: 4, label: 'Bậc 4 (> 30 m³)',    capacity: Infinity, price: 27000 },
 ];
 
 const ENV_FEE_RATE = 0.10; // 10% phí bảo vệ môi trường
@@ -114,7 +114,7 @@ export default function WaterCalculator() {
                 showIcon
                 message={
                     <span className="text-xs sm:text-sm">
-                        Biểu giá nước Hà Nội (từ 1/1/2024) – QĐ 18/2023/QĐ-UBND · VAT 5% + Phí BVMT 10%{' '}
+                        Biểu giá nước Hà Nội – QĐ 18/2023/QĐ-UBND · VAT 5% + Phí BVMT 10%{' '}
                         <Tooltip title="Phí bảo vệ môi trường = 10% giá nước trước thuế. VAT 5% tính trên (giá nước + phí BVMT).">
                             <InfoCircleOutlined className="cursor-pointer" />
                         </Tooltip>
