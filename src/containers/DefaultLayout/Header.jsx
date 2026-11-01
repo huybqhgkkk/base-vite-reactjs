@@ -1,19 +1,13 @@
 import { useState, lazy, Suspense } from 'react';
-import { useLocation } from 'react-router-dom';
 import logo from '../../../public/assets/react.svg';
-import { useTranslation } from 'react-i18next';
-import { Select, Dropdown, Modal, Spin, Drawer } from 'antd';
+import { Modal, Spin } from 'antd';
 import {
     ThunderboltOutlined,
     ExperimentOutlined,
     CarOutlined,
-    ToolOutlined,
-    DownOutlined,
     MenuOutlined,
     CloseOutlined,
 } from '@ant-design/icons';
-
-const { Option } = Select;
 
 const ElectricityCalculator = lazy(() => import('../../components/calculators/ElectricityCalculator'));
 const WaterCalculator = lazy(() => import('../../components/calculators/WaterCalculator'));
@@ -43,39 +37,15 @@ const TOOLS = {
     },
 };
 
-const NAV_LINKS = [
-    { path: '/', key: 'home' },
-    { path: '/post', key: 'post' },
-    { path: '/counter', key: 'couter' },
-    { path: '/my-form', key: 'form' },
-];
-
 function Header() {
-    const location = useLocation();
-    const { t, i18n } = useTranslation();
     const [activeTool, setActiveTool] = useState(null);
-    const [mobileOpen, setMobileOpen] = useState(null); // null | 'menu' | toolKey
-
-    const changeLanguage = (lng) => {
-        i18n.changeLanguage(lng);
-    };
+    const [mobileOpen, setMobileOpen] = useState(false);
 
     const openTool = (key) => {
-        setMobileOpen(null);
+        setMobileOpen(false);
         setActiveTool(key);
     };
     const closeTool = () => setActiveTool(null);
-
-    const dropdownItems = Object.values(TOOLS).map((tool) => ({
-        key: tool.key,
-        label: (
-            <span className="flex items-center gap-2">
-                {tool.icon}
-                {tool.label}
-            </span>
-        ),
-        onClick: () => openTool(tool.key),
-    }));
 
     const ActiveComponent = activeTool ? TOOLS[activeTool].component : null;
 
@@ -90,65 +60,30 @@ function Header() {
                         </a>
                     </div>
 
-                    {/* Desktop nav */}
+                    {/* Desktop: 3 tool buttons */}
                     <ul className="hidden md:flex items-center gap-1">
-                        {NAV_LINKS.map(({ path, key }) => (
-                            <li key={key}>
-                                <a
-                                    href={path}
-                                    className={`${
-                                        location.pathname === path ? 'bg-gray-200' : 'hover:bg-gray-200'
-                                    } rounded-md px-3 py-2 transition-colors text-sm`}
-                                >
-                                    {t(key)}
-                                </a>
-                            </li>
-                        ))}
-
-                        {/* Tiện ích dropdown */}
-                        <li>
-                            <Dropdown menu={{ items: dropdownItems }} trigger={['click']}>
+                        {Object.values(TOOLS).map((tool) => (
+                            <li key={tool.key}>
                                 <button
-                                    className="flex items-center gap-1 rounded-md px-3 py-2 hover:bg-gray-200 transition-colors cursor-pointer border-0 bg-transparent text-sm"
+                                    onClick={() => openTool(tool.key)}
+                                    className="flex items-center gap-2 rounded-md px-3 py-2 hover:bg-gray-200 transition-colors text-sm border-0 bg-transparent cursor-pointer"
                                     type="button"
                                 >
-                                    <ToolOutlined className="text-gray-600" />
-                                    <span>Tiện ích</span>
-                                    <DownOutlined className="text-xs text-gray-500" />
+                                    {tool.icon}
+                                    <span>{tool.label}</span>
                                 </button>
-                            </Dropdown>
-                        </li>
-
-                        <li>
-                            <Select
-                                defaultValue={i18n.language}
-                                style={{ width: 110 }}
-                                size="small"
-                                onChange={changeLanguage}
-                            >
-                                <Option value="en">English</Option>
-                                <Option value="vi">Tiếng Việt</Option>
-                            </Select>
-                        </li>
+                            </li>
+                        ))}
                     </ul>
 
-                    {/* Mobile: language + hamburger */}
-                    <div className="flex md:hidden items-center gap-2">
-                        <Select
-                            defaultValue={i18n.language}
-                            style={{ width: 90 }}
-                            size="small"
-                            onChange={changeLanguage}
-                        >
-                            <Option value="en">EN</Option>
-                            <Option value="vi">VI</Option>
-                        </Select>
+                    {/* Mobile: hamburger */}
+                    <div className="flex md:hidden">
                         <button
-                            onClick={() => setMobileOpen(mobileOpen === 'menu' ? null : 'menu')}
+                            onClick={() => setMobileOpen(!mobileOpen)}
                             className="p-2 rounded-md hover:bg-gray-200 transition-colors border-0 bg-transparent cursor-pointer"
                             aria-label="Toggle menu"
                         >
-                            {mobileOpen === 'menu'
+                            {mobileOpen
                                 ? <CloseOutlined className="text-lg" />
                                 : <MenuOutlined className="text-lg" />
                             }
@@ -157,36 +92,20 @@ function Header() {
                 </nav>
 
                 {/* Mobile menu dropdown */}
-                {mobileOpen === 'menu' && (
+                {mobileOpen && (
                     <div className="md:hidden bg-gray-100 border-t border-gray-200 px-4 pb-4">
                         <ul className="flex flex-col gap-1 pt-2">
-                            {NAV_LINKS.map(({ path, key }) => (
-                                <li key={key}>
-                                    <a
-                                        href={path}
-                                        onClick={() => setMobileOpen(null)}
-                                        className={`${
-                                            location.pathname === path ? 'bg-gray-200' : 'hover:bg-gray-200'
-                                        } block rounded-md px-3 py-2 transition-colors text-sm`}
-                                    >
-                                        {t(key)}
-                                    </a>
-                                </li>
-                            ))}
-                            {/* Tools */}
-                            <li className="pt-1 border-t border-gray-200 mt-1">
-                                <p className="text-xs text-gray-500 px-3 py-1 uppercase tracking-wide">Tiện ích</p>
-                                {Object.values(TOOLS).map((tool) => (
+                            {Object.values(TOOLS).map((tool) => (
+                                <li key={tool.key}>
                                     <button
-                                        key={tool.key}
                                         onClick={() => openTool(tool.key)}
                                         className="w-full flex items-center gap-2 rounded-md px-3 py-2 hover:bg-gray-200 transition-colors text-sm border-0 bg-transparent cursor-pointer text-left"
                                     >
                                         {tool.icon}
                                         {tool.label}
                                     </button>
-                                ))}
-                            </li>
+                                </li>
+                            ))}
                         </ul>
                     </div>
                 )}

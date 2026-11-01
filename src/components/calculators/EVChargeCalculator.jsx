@@ -8,10 +8,10 @@ const { Title, Text } = Typography;
  * Tính thời gian sạc xe điện
  *
  * Công thức:
- *   Năng lượng cần nạp (kWh) = Dung lượng pin (kWh) × (% đích - % hiện tại) / 100
- *   Thời gian sạc (h)        = Năng lượng cần nạp / (Công suất sạc × Hiệu suất sạc)
+ *   Năng lượng cần nạp (Wh) = Dung lượng pin (Wh) × (% đích - % hiện tại) / 100
+ *   Thời gian sạc (h)       = Năng lượng cần nạp (Wh) / (Công suất sạc (W) × Hiệu suất sạc)
  *
- * Số điện nạp thực tế (kWh)  = Năng lượng cần nạp / Hiệu suất sạc  (lấy từ lưới điện)
+ * Số điện nạp thực tế (Wh)  = Năng lượng cần nạp / Hiệu suất sạc  (lấy từ lưới điện)
  * Tiêu thụ thực tế (kWh/100km) = tùy người dùng nhập
  */
 
@@ -28,9 +28,9 @@ export default function EVChargeCalculator() {
     const [form, setForm] = useState({
         currentSoc: 20,       // % pin hiện tại
         targetSoc: 80,        // % pin muốn sạc tới
-        chargerPower: 7.4,    // kW – công suất sạc (AC 7.4 kW mặc định)
-        chargeEfficiency: 90, // % hiệu suất sạc
-        batteryCapacity: 40,  // kWh – dung lượng pin gốc
+        chargerPower: 467,   // W – công suất sạc (AC 7.4 kW mặc định)
+        chargeEfficiency: 85, // % hiệu suất sạc
+        batteryCapacity: 2400, // Wh – dung lượng pin gốc
     });
     const [result, setResult] = useState(null);
 
@@ -52,24 +52,25 @@ export default function EVChargeCalculator() {
 
         const efficiency = chargeEfficiency / 100;
 
-        // Năng lượng cần nạp vào pin (kWh)
+        // Năng lượng cần nạp vào pin (Wh)
         const energyNeeded = batteryCapacity * (targetSoc - currentSoc) / 100;
 
         // Thời gian sạc
         const chargingHours = energyNeeded / (chargerPower * efficiency);
 
-        // Số điện lấy từ lưới (kWh) – tính cả tổn thất hiệu suất
+        // Số điện lấy từ lưới (Wh) – tính cả tổn thất hiệu suất
         const gridElectricity = energyNeeded / efficiency;
 
-        // Tiền điện (theo giá EVN bậc 3 trung bình ~2.271 đ/kWh, để đơn giản dùng 2.500)
+        // Giá điện được tính theo kWh nên đổi Wh sang kWh
         // Dùng giá điện bình quân kinh doanh ~3.200 đ (bãi sạc công cộng thường tính vậy)
-        const costHome = gridElectricity * 2500;   // sạc tại nhà ước tính
-        const costStation = gridElectricity * 3200; // trạm công cộng ước tính
+        const gridElectricityKwh = gridElectricity / 1000;
+        const costHome = gridElectricityKwh * 2500;   // sạc tại nhà ước tính
+        const costStation = gridElectricityKwh * 3200; // trạm công cộng ước tính
 
         setResult({
             error: null,
-            energyNeeded: +energyNeeded.toFixed(3),
-            gridElectricity: +gridElectricity.toFixed(3),
+            energyNeeded: Math.round(energyNeeded),
+            gridElectricity: Math.round(gridElectricity),
             chargingHours: +chargingHours.toFixed(3),
             costHome: Math.round(costHome),
             costStation: Math.round(costStation),
@@ -95,24 +96,24 @@ export default function EVChargeCalculator() {
         {
             key: 'batteryCapacity',
             label: 'Dung lượng pin gốc',
-            unit: 'kWh',
-            min: 1, max: 200,
-            step: 0.1,
+            unit: 'Wh',
+            min: 1000, max: 999999999,
+            step: 100,
             tip: 'Dung lượng pin danh định của xe (ghi trong thông số kỹ thuật)',
         },
         {
             key: 'chargerPower',
             label: 'Công suất sạc',
-            unit: 'kW',
-            min: 0.1, max: 350,
-            step: 0.1,
-            tip: 'Công suất bộ sạc (AC 7.4kW, AC 11kW, DC 50kW, DC 150kW…)',
+            unit: 'W',
+            min: 100, max: 350000,
+            step: 100,
+            tip: 'Công suất bộ sạc (AC 7.400 W, AC 11.000 W, DC 50.000 W, DC 150.000 W…)',
         },
         {
             key: 'chargeEfficiency',
             label: 'Hiệu suất sạc',
             unit: '%',
-            min: 50, max: 100,
+            min: 30, max: 100,
             tip: 'Hiệu suất chuyển đổi điện từ lưới vào pin (~85–95%). Sạc AC thường 88–92%, DC cao hơn.',
         },
     ];
@@ -183,16 +184,16 @@ export default function EVChargeCalculator() {
                                     <Statistic
                                         title="Năng lượng nạp vào pin"
                                         value={result.energyNeeded}
-                                        suffix="kWh"
-                                        precision={2}
+                                        suffix="Wh"
+                                        precision={0}
                                     />
                                 </Col>
                                 <Col xs={12} sm={8}>
                                     <Statistic
                                         title="Điện lấy từ lưới"
                                         value={result.gridElectricity}
-                                        suffix="kWh"
-                                        precision={2}
+                                        suffix="Wh"
+                                        precision={0}
                                         valueStyle={{ color: '#faad14' }}
                                     />
                                 </Col>
@@ -205,16 +206,16 @@ export default function EVChargeCalculator() {
                                 </div>
                                 <div className="flex justify-between gap-2">
                                     <Text className="text-sm shrink-0">Điện lấy từ lưới:</Text>
-                                    <Text strong className="text-right">{result.gridElectricity} kWh</Text>
+                                    <Text strong className="text-right">{result.gridElectricity.toLocaleString('vi-VN')} Wh</Text>
                                 </div>
                                 <div className="flex justify-between gap-2">
                                     <Text className="text-sm shrink-0">Điện nạp vào pin:</Text>
-                                    <Text strong className="text-right">{result.energyNeeded} kWh</Text>
+                                    <Text strong className="text-right">{result.energyNeeded.toLocaleString('vi-VN')} Wh</Text>
                                 </div>
                                 <div className="flex justify-between gap-2">
                                     <Text className="text-sm shrink-0">Tổn hao hiệu suất:</Text>
                                     <Text type="warning" className="text-right">
-                                        {(result.gridElectricity - result.energyNeeded).toFixed(3)} kWh ({(100 - form.chargeEfficiency)}%)
+                                        {(result.gridElectricity - result.energyNeeded).toLocaleString('vi-VN')} Wh ({(100 - form.chargeEfficiency)}%)
                                     </Text>
                                 </div>
                                 <Divider className="my-1" />
