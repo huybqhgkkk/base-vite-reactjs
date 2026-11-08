@@ -2,7 +2,7 @@ import React, { useState, useMemo } from 'react';
 import dayjs from 'dayjs';
 import duration from 'dayjs/plugin/duration';
 import {
-    Button, Modal, Form, InputNumber, DatePicker, Table, Popconfirm, Typography,
+    Button, Modal, Form, InputNumber, DatePicker, TimePicker, Table, Popconfirm, Typography,
     Statistic, Row, Col, Tag, Alert, Tooltip, Empty, Divider,
 } from 'antd';
 import {
@@ -18,7 +18,6 @@ import { getLogs, saveLog, deleteLog, calcLog, calcCarStats } from './evStorage'
 dayjs.extend(duration);
 
 const { Text, Title } = Typography;
-const { RangePicker } = DatePicker;
 
 function genId() {
     return `log_${Date.now()}_${Math.random().toString(36).slice(2, 7)}`;
@@ -51,6 +50,8 @@ function efficiencyColor(eff) {
 export default function EVChargeLog({ car, logs, onLogsChange }) {
     const [modalOpen, setModalOpen] = useState(false);
     const [editing, setEditing] = useState(null);
+    const [saving, setSaving] = useState(false);
+    const [deletingId, setDeletingId] = useState(null);
     const [form] = Form.useForm();
 
     // Computed data for each log
@@ -91,39 +92,58 @@ export default function EVChargeLog({ car, logs, onLogsChange }) {
 
     const openEdit = (log) => {
         setEditing(log);
+        const start = dayjs(log.startTime);
+        const end = dayjs(log.endTime);
         form.setFieldsValue({
             soc: [log.startSoc, log.endSoc],
-            timeRange: [dayjs(log.startTime), dayjs(log.endTime)],
+            chargeDate: start,
+            startTime: start,
+            endTime: end,
             chargerPower: log.chargerPower,
             electricityCost: log.electricityCost ?? null,
         });
         setModalOpen(true);
     };
 
-    const handleOk = () => {
-        form.validateFields().then((values) => {
-            const [startSoc, endSoc] = values.soc;
-            const [startTime, endTime] = values.timeRange;
-            const log = {
-                id: editing?.id ?? genId(),
-                carId: car.id,
-                startSoc,
-                endSoc,
-                chargerPower: values.chargerPower,
-                electricityCost: values.electricityCost ?? 0,
-                startTime: startTime.toISOString(),
-                endTime: endTime.toISOString(),
-                createdAt: editing?.createdAt ?? new Date().toISOString(),
-            };
-            saveLog(log);
-            onLogsChange();
+    const handleOk = async () => {
+        const values = await form.validateFields();
+        const [startSoc, endSoc] = values.soc;
+
+        const dateStr = values.chargeDate.format('YYYY-MM-DD');
+        const startTime = dayjs(`${dateStr} ${values.startTime.format('HH:mm')}`);
+        let endTime = dayjs(`${dateStr} ${values.endTime.format('HH:mm')}`);
+        if (endTime.isBefore(startTime)) endTime = endTime.add(1, 'day');
+
+        const log = {
+            id: editing?.id ?? genId(),
+            carId: car.id,
+            startSoc,
+            endSoc,
+            chargerPower: values.chargerPower,
+            electricityCost: values.electricityCost ?? 0,
+            startTime: startTime.toISOString(),
+            endTime: endTime.toISOString(),
+            createdAt: editing?.createdAt ?? new Date().toISOString(),
+        };
+
+        setSaving(true);
+        try {
+            await saveLog(log);
+            await onLogsChange();
             setModalOpen(false);
-        });
+        } finally {
+            setSaving(false);
+        }
     };
 
-    const handleDelete = (logId) => {
-        deleteLog(car.id, logId);
-        onLogsChange();
+    const handleDelete = async (logId) => {
+        setDeletingId(logId);
+        try {
+            await deleteLog(car.id, logId);
+            await onLogsChange();
+        } finally {
+            setDeletingId(null);
+        }
     };
 
     const columns = [
@@ -220,7 +240,12 @@ export default function EVChargeLog({ car, logs, onLogsChange }) {
             render: (_, r) => (
                 <div className="flex gap-1">
                     <Tooltip title="Sửa">
-                        <Button size="small" icon={<EditOutlined />} onClick={() => openEdit(r)} />
+                        <Button
+                            size="small"
+                            icon={<EditOutlined />}
+                            onClick={() => openEdit(r)}
+                            disabled={deletingId === r.id}
+                        />
                     </Tooltip>
                     <Popconfirm
                         title="Xóa lần sạc này?"
@@ -229,7 +254,12 @@ export default function EVChargeLog({ car, logs, onLogsChange }) {
                         cancelText="Hủy"
                         okButtonProps={{ danger: true }}
                     >
-                        <Button size="small" danger icon={<DeleteOutlined />} />
+                        <Button
+                            size="small"
+                            danger
+                            loading={deletingId === r.id}
+                            icon={<DeleteOutlined />}
+                        />
                     </Popconfirm>
                 </div>
             ),
@@ -385,6 +415,7 @@ export default function EVChargeLog({ car, logs, onLogsChange }) {
                 okText={editing ? 'Lưu' : 'Thêm'}
                 cancelText="Hủy"
                 width={480}
+                confirmLoading={saving}
                 destroyOnClose
             >
                 <Form form={form} layout="vertical" className="mt-4">
@@ -408,26 +439,53 @@ export default function EVChargeLog({ car, logs, onLogsChange }) {
                     </Form.Item>
 
                     <Form.Item
-                        name="timeRange"
-                        label="Thời gian sạc (từ → đến)"
-                        rules={[
-                            { required: true, message: 'Chọn khoảng thời gian sạc' },
-                            {
-                                validator: (_, val) => {
-                                    if (!val || !val[0] || !val[1]) return Promise.reject('Chọn đủ giờ bắt đầu và kết thúc');
-                                    if (val[1].isBefore(val[0])) return Promise.reject('Giờ kết thúc phải sau giờ bắt đầu');
-                                    return Promise.resolve();
-                                },
-                            },
-                        ]}
+                        name="chargeDate"
+                        label="Ngày sạc"
+                        initialValue={dayjs()}
+                        rules={[{ required: true, message: 'Chọn ngày sạc' }]}
                     >
-                        <RangePicker
-                            showTime={{ format: 'HH:mm', minuteStep: 5 }}
-                            format="DD/MM/YYYY HH:mm"
+                        <DatePicker
+                            format="DD/MM/YYYY"
                             style={{ width: '100%' }}
-                            placeholder={['Bắt đầu sạc', 'Kết thúc sạc']}
+                            placeholder="Chọn ngày"
+                            allowClear={false}
                         />
                     </Form.Item>
+
+                    <Row gutter={12}>
+                        <Col span={12}>
+                            <Form.Item
+                                name="startTime"
+                                label="Giờ bắt đầu"
+                                rules={[{ required: true, message: 'Chọn giờ bắt đầu' }]}
+                            >
+                                <TimePicker
+                                    format="HH:mm"
+                                    minuteStep={5}
+                                    style={{ width: '100%' }}
+                                    placeholder="Bắt đầu"
+                                    allowClear={false}
+                                    needConfirm={false}
+                                />
+                            </Form.Item>
+                        </Col>
+                        <Col span={12}>
+                            <Form.Item
+                                name="endTime"
+                                label="Giờ kết thúc"
+                                rules={[{ required: true, message: 'Chọn giờ kết thúc' }]}
+                            >
+                                <TimePicker
+                                    format="HH:mm"
+                                    minuteStep={5}
+                                    style={{ width: '100%' }}
+                                    placeholder="Kết thúc"
+                                    allowClear={false}
+                                    needConfirm={false}
+                                />
+                            </Form.Item>
+                        </Col>
+                    </Row>
 
                     <Form.Item
                         name="chargerPower"

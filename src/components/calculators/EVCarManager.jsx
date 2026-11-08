@@ -1,11 +1,11 @@
 import React, { useState } from 'react';
 import {
-    Button, Modal, Form, InputNumber, Input, Popconfirm, Typography, Card, Tag, Empty, Tooltip,
+    Button, Modal, Form, InputNumber, Input, Popconfirm, Typography, Card, Tag, Empty, Tooltip, Spin,
 } from 'antd';
 import {
     PlusOutlined, EditOutlined, DeleteOutlined, CarOutlined, ThunderboltOutlined,
 } from '@ant-design/icons';
-import { getCars, saveCar, deleteCar } from './evStorage';
+import { saveCar, deleteCar } from './evStorage';
 
 const { Text, Title } = Typography;
 
@@ -17,13 +17,15 @@ function genId() {
  * EVCarManager
  * Props:
  *   cars: Car[]
- *   onCarsChange: () => void  — gọi lại khi có thay đổi
+ *   onCarsChange: () => Promise<void>
  *   onSelectCar: (car) => void
  *   selectedCarId: string | null
  */
 export default function EVCarManager({ cars, onCarsChange, onSelectCar, selectedCarId }) {
     const [modalOpen, setModalOpen] = useState(false);
-    const [editing, setEditing] = useState(null); // null = tạo mới
+    const [editing, setEditing] = useState(null);
+    const [saving, setSaving] = useState(false);
+    const [deletingId, setDeletingId] = useState(null);
     const [form] = Form.useForm();
 
     const openCreate = () => {
@@ -42,8 +44,10 @@ export default function EVCarManager({ cars, onCarsChange, onSelectCar, selected
         setModalOpen(true);
     };
 
-    const handleOk = () => {
-        form.validateFields().then((values) => {
+    const handleOk = async () => {
+        const values = await form.validateFields();
+        setSaving(true);
+        try {
             const car = {
                 id: editing?.id ?? genId(),
                 name: values.name.trim(),
@@ -51,16 +55,23 @@ export default function EVCarManager({ cars, onCarsChange, onSelectCar, selected
                 consumptionPer100km: values.consumptionPer100km ?? 0,
                 createdAt: editing?.createdAt ?? new Date().toISOString(),
             };
-            saveCar(car);
-            onCarsChange();
+            await saveCar(car);
+            await onCarsChange();
             setModalOpen(false);
-        });
+        } finally {
+            setSaving(false);
+        }
     };
 
-    const handleDelete = (carId) => {
-        deleteCar(carId);
-        onCarsChange();
-        if (selectedCarId === carId) onSelectCar(null);
+    const handleDelete = async (carId) => {
+        setDeletingId(carId);
+        try {
+            await deleteCar(carId);
+            await onCarsChange();
+            if (selectedCarId === carId) onSelectCar(null);
+        } finally {
+            setDeletingId(null);
+        }
     };
 
     return (
@@ -83,6 +94,7 @@ export default function EVCarManager({ cars, onCarsChange, onSelectCar, selected
                 <div className="flex flex-col gap-2">
                     {cars.map((car) => {
                         const isSelected = car.id === selectedCarId;
+                        const isDeleting = deletingId === car.id;
                         return (
                             <Card
                                 key={car.id}
@@ -92,17 +104,15 @@ export default function EVCarManager({ cars, onCarsChange, onSelectCar, selected
                                         ? 'border-green-500 bg-green-50 shadow'
                                         : 'hover:border-gray-400'
                                 }`}
-                                onClick={() => onSelectCar(car)}
+                                onClick={() => !isDeleting && onSelectCar(car)}
                                 extra={
-                                    <div
-                                        className="flex gap-1"
-                                        onClick={(e) => e.stopPropagation()}
-                                    >
+                                    <div className="flex gap-1" onClick={(e) => e.stopPropagation()}>
                                         <Tooltip title="Sửa xe">
                                             <Button
                                                 size="small"
                                                 icon={<EditOutlined />}
                                                 onClick={() => openEdit(car)}
+                                                disabled={isDeleting}
                                             />
                                         </Tooltip>
                                         <Popconfirm
@@ -116,7 +126,8 @@ export default function EVCarManager({ cars, onCarsChange, onSelectCar, selected
                                             <Button
                                                 size="small"
                                                 danger
-                                                icon={<DeleteOutlined />}
+                                                icon={isDeleting ? <Spin size="small" /> : <DeleteOutlined />}
+                                                disabled={isDeleting}
                                             />
                                         </Popconfirm>
                                     </div>
@@ -148,6 +159,7 @@ export default function EVCarManager({ cars, onCarsChange, onSelectCar, selected
                 onCancel={() => setModalOpen(false)}
                 okText={editing ? 'Lưu' : 'Thêm'}
                 cancelText="Hủy"
+                confirmLoading={saving}
                 destroyOnClose
             >
                 <Form form={form} layout="vertical" className="mt-4">

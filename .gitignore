@@ -24,3 +24,7 @@ build
 *.sln
 *.sw?
 /package-lock.json
+
+# Environment secrets
+.env
+.env.*

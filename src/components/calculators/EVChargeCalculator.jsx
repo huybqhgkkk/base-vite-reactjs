@@ -1,5 +1,5 @@
-import React, { useState, useCallback } from 'react';
-import { Tabs, Typography } from 'antd';
+import React, { useState, useCallback, useEffect } from 'react';
+import { Tabs, Typography, Spin, Alert } from 'antd';
 import { CarOutlined, ThunderboltOutlined, CalculatorOutlined } from '@ant-design/icons';
 import EVCarManager from './EVCarManager';
 import EVChargeLog from './EVChargeLog';
@@ -9,30 +9,64 @@ import { getCars, getLogs } from './evStorage';
 const { Title } = Typography;
 
 export default function EVChargeCalculator() {
-    const [cars, setCars] = useState(() => getCars());
+    const [cars, setCars] = useState([]);
     const [selectedCar, setSelectedCar] = useState(null);
     const [logs, setLogs] = useState([]);
     const [activeTab, setActiveTab] = useState('tracker');
+    const [loadingCars, setLoadingCars] = useState(true);
+    const [loadingLogs, setLoadingLogs] = useState(false);
+    const [error, setError] = useState(null);
 
-    const refreshCars = useCallback(() => {
-        const updated = getCars();
-        setCars(updated);
-        // keep selectedCar in sync
-        if (selectedCar) {
-            const found = updated.find((c) => c.id === selectedCar.id);
-            setSelectedCar(found ?? null);
-            if (found) setLogs(getLogs(found.id));
-            else setLogs([]);
+    // Load danh sách xe lần đầu
+    useEffect(() => {
+        setLoadingCars(true);
+        getCars()
+            .then(setCars)
+            .catch((e) => setError(e.message))
+            .finally(() => setLoadingCars(false));
+    }, []);
+
+    const refreshCars = useCallback(async () => {
+        try {
+            const updated = await getCars();
+            setCars(updated);
+            if (selectedCar) {
+                const found = updated.find((c) => c.id === selectedCar.id);
+                setSelectedCar(found ?? null);
+                if (found) {
+                    const updatedLogs = await getLogs(found.id);
+                    setLogs(updatedLogs);
+                } else {
+                    setLogs([]);
+                }
+            }
+        } catch (e) {
+            setError(e.message);
         }
     }, [selectedCar]);
 
-    const handleSelectCar = useCallback((car) => {
+    const handleSelectCar = useCallback(async (car) => {
         setSelectedCar(car);
-        setLogs(car ? getLogs(car.id) : []);
+        if (!car) { setLogs([]); return; }
+        setLoadingLogs(true);
+        try {
+            const data = await getLogs(car.id);
+            setLogs(data);
+        } catch (e) {
+            setError(e.message);
+        } finally {
+            setLoadingLogs(false);
+        }
     }, []);
 
-    const refreshLogs = useCallback(() => {
-        if (selectedCar) setLogs(getLogs(selectedCar.id));
+    const refreshLogs = useCallback(async () => {
+        if (!selectedCar) return;
+        try {
+            const data = await getLogs(selectedCar.id);
+            setLogs(data);
+        } catch (e) {
+            setError(e.message);
+        }
     }, [selectedCar]);
 
     return (
@@ -40,6 +74,16 @@ export default function EVChargeCalculator() {
             <Title level={4} className="flex items-center gap-2 !text-base sm:!text-lg !mb-3">
                 <CarOutlined className="text-green-600" /> EV Charge Tracker
             </Title>
+
+            {error && (
+                <Alert
+                    type="error"
+                    message={`Lỗi kết nối server: ${error}`}
+                    closable
+                    onClose={() => setError(null)}
+                    className="mb-3"
+                />
+            )}
 
             <Tabs
                 activeKey={activeTab}
@@ -58,17 +102,27 @@ export default function EVChargeCalculator() {
                             <div className="flex flex-col lg:flex-row gap-4">
                                 {/* Left: car list */}
                                 <div className="w-full lg:w-64 shrink-0">
-                                    <EVCarManager
-                                        cars={cars}
-                                        onCarsChange={refreshCars}
-                                        onSelectCar={handleSelectCar}
-                                        selectedCarId={selectedCar?.id ?? null}
-                                    />
+                                    {loadingCars ? (
+                                        <div className="flex justify-center py-8">
+                                            <Spin />
+                                        </div>
+                                    ) : (
+                                        <EVCarManager
+                                            cars={cars}
+                                            onCarsChange={refreshCars}
+                                            onSelectCar={handleSelectCar}
+                                            selectedCarId={selectedCar?.id ?? null}
+                                        />
+                                    )}
                                 </div>
 
                                 {/* Right: log detail */}
                                 <div className="flex-1 min-w-0">
-                                    {selectedCar ? (
+                                    {loadingLogs ? (
+                                        <div className="flex justify-center py-8">
+                                            <Spin />
+                                        </div>
+                                    ) : selectedCar ? (
                                         <EVChargeLog
                                             key={selectedCar.id}
                                             car={selectedCar}

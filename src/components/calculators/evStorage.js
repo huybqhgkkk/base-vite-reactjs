@@ -1,81 +1,92 @@
 /**
- * LocalStorage helpers cho EV Charge Tracker
- * Schema:
- *   ev_cars: Car[]
- *   Car { id, name, batteryCapacity (Wh), consumptionPer100km (Wh/100km), createdAt }
- *   ev_logs_{carId}: ChargeLog[]
- *   ChargeLog { id, carId, startSoc, endSoc, chargerPower (W), startTime (ISO), endTime (ISO),
- *               electricityCost (đ/kWh, optional), createdAt }
+ * EV Storage — API client cho Vercel Serverless + Upstash Redis
+ *
+ * Interface giống hệt phiên bản localStorage cũ:
+ *   getCars()           → Promise<Car[]>
+ *   saveCar(car)        → Promise<Car>
+ *   deleteCar(carId)    → Promise<void>
+ *   getLogs(carId)      → Promise<ChargeLog[]>
+ *   saveLog(log)        → Promise<ChargeLog>
+ *   deleteLog(carId, id)→ Promise<void>
+ *
+ * Các hàm tính toán (calcLog, calcCarStats) giữ nguyên — pure functions.
  */
 
-const CARS_KEY = 'ev_cars';
-const logsKey = (carId) => `ev_logs_${carId}`;
+// Khi chạy local (npm run dev) Vite proxy /api → localhost:3000 nếu cần,
+// nhưng với Vercel dev (`vercel dev`) thì /api đã tự có.
+// Trong production Vercel, /api/* route đến serverless functions.
+const BASE = '/api';
+
+async function apiFetch(path, options = {}) {
+    const res = await fetch(`${BASE}${path}`, {
+        headers: { 'Content-Type': 'application/json' },
+        ...options,
+    });
+    if (!res.ok) {
+        const err = await res.json().catch(() => ({ error: res.statusText }));
+        throw new Error(err.error ?? `HTTP ${res.status}`);
+    }
+    return res.json();
+}
 
 // ---------- Cars ----------
 
-export function getCars() {
-    try {
-        return JSON.parse(localStorage.getItem(CARS_KEY) || '[]');
-    } catch {
-        return [];
-    }
+export async function getCars() {
+    return apiFetch('/cars');
 }
 
-export function saveCar(car) {
-    const cars = getCars();
-    const idx = cars.findIndex((c) => c.id === car.id);
-    if (idx >= 0) cars[idx] = car;
-    else cars.push(car);
-    localStorage.setItem(CARS_KEY, JSON.stringify(cars));
+export async function saveCar(car) {
+    return apiFetch('/cars', {
+        method: 'POST',
+        body: JSON.stringify(car),
+    });
 }
 
-export function deleteCar(carId) {
-    const cars = getCars().filter((c) => c.id !== carId);
-    localStorage.setItem(CARS_KEY, JSON.stringify(cars));
-    localStorage.removeItem(logsKey(carId));
+export async function deleteCar(carId) {
+    await apiFetch('/cars', {
+        method: 'DELETE',
+        body: JSON.stringify({ id: carId }),
+    });
 }
 
 // ---------- Logs ----------
 
-export function getLogs(carId) {
-    try {
-        return JSON.parse(localStorage.getItem(logsKey(carId)) || '[]');
-    } catch {
-        return [];
-    }
+export async function getLogs(carId) {
+    return apiFetch(`/logs?carId=${encodeURIComponent(carId)}`);
 }
 
-export function saveLog(log) {
-    const logs = getLogs(log.carId);
-    const idx = logs.findIndex((l) => l.id === log.id);
-    if (idx >= 0) logs[idx] = log;
-    else logs.push(log);
-    localStorage.setItem(logsKey(log.carId), JSON.stringify(logs));
+export async function saveLog(log) {
+    return apiFetch('/logs', {
+        method: 'POST',
+        body: JSON.stringify(log),
+    });
 }
 
-export function deleteLog(carId, logId) {
-    const logs = getLogs(carId).filter((l) => l.id !== logId);
-    localStorage.setItem(logsKey(carId), JSON.stringify(logs));
+export async function deleteLog(carId, logId) {
+    await apiFetch('/logs', {
+        method: 'DELETE',
+        body: JSON.stringify({ carId, id: logId }),
+    });
 }
 
-// ---------- Calculations ----------
+// ---------- Pure calculation helpers (không đổi) ----------
 
 /**
  * Tính toán cho 1 log:
  *   energyNeeded (Wh) = batteryCapacity × (endSoc - startSoc) / 100
  *   durationHours     = (endTime - startTime) in hours
- *   actualPower (W)   = energyNeeded / durationHours  (công suất đầu ra thực tế)
+ *   actualPower (W)   = energyNeeded / durationHours
  *   efficiency (%)    = actualPower / chargerPower × 100
  *   gridEnergy (Wh)   = energyNeeded / (efficiency/100)
  *   cost (đ)          = gridEnergy/1000 × electricityCost
- *   chargingKm        = energyNeeded / (consumptionPer100km/100)  km
- *   chargingSpeedKmH  = chargingKm / durationHours  km/h
+ *   chargingKm        = energyNeeded / (consumptionPer100km/100) km
+ *   chargingSpeedKmH  = chargingKm / durationHours km/h
  */
 export function calcLog(log, car) {
     const socDelta = log.endSoc - log.startSoc;
     if (socDelta <= 0) return null;
 
-    const energyNeeded = (car.batteryCapacity * socDelta) / 100; // Wh vào pin
+    const energyNeeded = (car.batteryCapacity * socDelta) / 100;
     const start = new Date(log.startTime);
     const end = new Date(log.endTime);
     const durationMs = end - start;
@@ -83,11 +94,10 @@ export function calcLog(log, car) {
     const durationHours = durationMs / 3_600_000;
     const durationMinutes = durationMs / 60_000;
 
-    const actualPower = energyNeeded / durationHours; // W thực tế ra pin
+    const actualPower = energyNeeded / durationHours;
     const efficiency = log.chargerPower > 0 ? (actualPower / log.chargerPower) * 100 : 0;
-    const gridEnergy = efficiency > 0 ? energyNeeded / (efficiency / 100) : energyNeeded; // Wh lưới
-    const cost =
-        log.electricityCost > 0 ? (gridEnergy / 1000) * log.electricityCost : null;
+    const gridEnergy = efficiency > 0 ? energyNeeded / (efficiency / 100) : energyNeeded;
+    const cost = log.electricityCost > 0 ? (gridEnergy / 1000) * log.electricityCost : null;
 
     const chargingKm =
         car.consumptionPer100km > 0
@@ -110,17 +120,10 @@ export function calcLog(log, car) {
 }
 
 /**
- * Tổng hợp hiệu suất thực tế từ tất cả log:
- *   avgEfficiency = mean(efficiency của mỗi log có data hợp lệ)
- *   totalEnergy   = tổng gridEnergy (Wh)
- *   totalCost     = tổng cost
- *   sessionCount  = số lần sạc hợp lệ
+ * Tổng hợp hiệu suất từ tất cả log của 1 xe
  */
 export function calcCarStats(logs, car) {
-    const computed = logs
-        .map((l) => calcLog(l, car))
-        .filter(Boolean);
-
+    const computed = logs.map((l) => calcLog(l, car)).filter(Boolean);
     if (computed.length === 0) return null;
 
     const avgEfficiency =
