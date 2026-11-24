@@ -16,10 +16,10 @@ function formatDuration(hours) {
 export default function EVQuickCalc() {
     const [form, setForm] = useState({
         currentSoc: 20,
-        targetSoc: 80,
-        chargerPower: 7400,
+        targetSoc: 85,
+        chargerPower: 466,
         chargeEfficiency: 85,
-        batteryCapacity: 82000,
+        batteryCapacity: 2400,
     });
     const [result, setResult] = useState(null);
 

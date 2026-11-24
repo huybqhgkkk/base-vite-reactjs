@@ -2,7 +2,7 @@ import React, { useState, useMemo } from 'react';
 import dayjs from 'dayjs';
 import duration from 'dayjs/plugin/duration';
 import {
-    Button, Modal, Form, InputNumber, DatePicker, TimePicker, Table, Popconfirm, Typography,
+    Button, Modal, Form, InputNumber, Table, Popconfirm, Typography,
     Statistic, Row, Col, Tag, Alert, Tooltip, Empty, Divider,
 } from 'antd';
 import {
@@ -84,6 +84,7 @@ export default function EVChargeLog({ car, logs, onLogsChange }) {
         setEditing(null);
         form.resetFields();
         form.setFieldsValue({
+            chargeDate: dayjs().format('YYYY-MM-DD'),
             chargerPower: car.defaultChargerPower ?? 7400,
             electricityCost: 2500,
         });
@@ -96,9 +97,9 @@ export default function EVChargeLog({ car, logs, onLogsChange }) {
         const end = dayjs(log.endTime);
         form.setFieldsValue({
             soc: [log.startSoc, log.endSoc],
-            chargeDate: start,
-            startTime: start,
-            endTime: end,
+            chargeDate: start.format('YYYY-MM-DD'),
+            startTime: start.format('HH:mm'),
+            endTime: end.format('HH:mm'),
             chargerPower: log.chargerPower,
             electricityCost: log.electricityCost ?? null,
         });
@@ -109,9 +110,10 @@ export default function EVChargeLog({ car, logs, onLogsChange }) {
         const values = await form.validateFields();
         const [startSoc, endSoc] = values.soc;
 
-        const dateStr = values.chargeDate.format('YYYY-MM-DD');
-        const startTime = dayjs(`${dateStr} ${values.startTime.format('HH:mm')}`);
-        let endTime = dayjs(`${dateStr} ${values.endTime.format('HH:mm')}`);
+        // values.chargeDate là string 'YYYY-MM-DD', startTime/endTime là 'HH:mm'
+        const dateStr = values.chargeDate;
+        const startTime = dayjs(`${dateStr} ${values.startTime}`);
+        let endTime = dayjs(`${dateStr} ${values.endTime}`);
         if (endTime.isBefore(startTime)) endTime = endTime.add(1, 'day');
 
         const log = {
@@ -441,15 +443,10 @@ export default function EVChargeLog({ car, logs, onLogsChange }) {
                     <Form.Item
                         name="chargeDate"
                         label="Ngày sạc"
-                        initialValue={dayjs()}
+                        initialValue={dayjs().format('YYYY-MM-DD')}
                         rules={[{ required: true, message: 'Chọn ngày sạc' }]}
                     >
-                        <DatePicker
-                            format="DD/MM/YYYY"
-                            style={{ width: '100%' }}
-                            placeholder="Chọn ngày"
-                            allowClear={false}
-                        />
+                        <NativeDateInput />
                     </Form.Item>
 
                     <Row gutter={12}>
@@ -459,14 +456,7 @@ export default function EVChargeLog({ car, logs, onLogsChange }) {
                                 label="Giờ bắt đầu"
                                 rules={[{ required: true, message: 'Chọn giờ bắt đầu' }]}
                             >
-                                <TimePicker
-                                    format="HH:mm"
-                                    minuteStep={5}
-                                    style={{ width: '100%' }}
-                                    placeholder="Bắt đầu"
-                                    allowClear={false}
-                                    needConfirm={false}
-                                />
+                                <NativeTimeInput placeholder="Bắt đầu" />
                             </Form.Item>
                         </Col>
                         <Col span={12}>
@@ -475,14 +465,7 @@ export default function EVChargeLog({ car, logs, onLogsChange }) {
                                 label="Giờ kết thúc"
                                 rules={[{ required: true, message: 'Chọn giờ kết thúc' }]}
                             >
-                                <TimePicker
-                                    format="HH:mm"
-                                    minuteStep={5}
-                                    style={{ width: '100%' }}
-                                    placeholder="Kết thúc"
-                                    allowClear={false}
-                                    needConfirm={false}
-                                />
+                                <NativeTimeInput placeholder="Kết thúc" />
                             </Form.Item>
                         </Col>
                     </Row>
@@ -553,5 +536,58 @@ function SocRangeInput({ value, onChange }) {
                 style={{ flex: 1 }}
             />
         </div>
+    );
+}
+
+/** Native date input — trình duyệt mobile mở date picker hệ thống */
+function NativeDateInput({ value, onChange }) {
+    return (
+        <input
+            type="date"
+            value={value ?? ''}
+            onChange={(e) => onChange?.(e.target.value)}
+            style={{
+                width: '100%',
+                padding: '7px 11px',
+                fontSize: 14,
+                border: '1px solid #d9d9d9',
+                borderRadius: 6,
+                outline: 'none',
+                color: '#000000d9',
+                background: '#fff',
+                boxSizing: 'border-box',
+                appearance: 'none',
+                WebkitAppearance: 'none',
+            }}
+            onFocus={(e) => (e.target.style.borderColor = '#1677ff')}
+            onBlur={(e) => (e.target.style.borderColor = '#d9d9d9')}
+        />
+    );
+}
+
+/** Native time input — trình duyệt mobile mở time picker hệ thống */
+function NativeTimeInput({ value, onChange, placeholder }) {
+    return (
+        <input
+            type="time"
+            value={value ?? ''}
+            onChange={(e) => onChange?.(e.target.value)}
+            placeholder={placeholder}
+            style={{
+                width: '100%',
+                padding: '7px 11px',
+                fontSize: 14,
+                border: '1px solid #d9d9d9',
+                borderRadius: 6,
+                outline: 'none',
+                color: '#000000d9',
+                background: '#fff',
+                boxSizing: 'border-box',
+                appearance: 'none',
+                WebkitAppearance: 'none',
+            }}
+            onFocus={(e) => (e.target.style.borderColor = '#1677ff')}
+            onBlur={(e) => (e.target.style.borderColor = '#d9d9d9')}
+        />
     );
 }
